@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import requests
 import os
 import logging
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -12,7 +13,7 @@ app = Flask(__name__)
 load_dotenv('example.env')
 
 # Configure logging
-logging.basicConfig(filename='webhook_errors.log', level=logging.ERROR)
+logging.basicConfig(filename='webhook_errors.log', level=logging.ERROR, format='%(asctime)s  %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 # Function to print issue information
 def print_info(issue_number, translated_description, status, tracker, priority, assignee_name, assignee_lastname):
