@@ -1,5 +1,5 @@
-pip install flask
-pip install deep_translator
-pip install beautifulsoup4
-pip install python-dotenv
-pip install requests
+beautifulsoup4==4.10.0
+deep-translator==1.5.6
+Flask==2.1.0
+python-dotenv==0.19.2
+requests==2.26.0
