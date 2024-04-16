@@ -229,8 +229,9 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                 if item["custom_field_name"] == "Translated Subject" and item["value"] == "":
                     send_translated(translated_description, issue_id)
                     send_whatsapp_message(message)
-                    send_whatsapp_image('screenshot.png')
                     get_foto(issue_id)
+                    if priority == 'Out of action':
+                        send_whatsapp_image('screenshot.png')
 
 
             os.remove('screenshot.png')
