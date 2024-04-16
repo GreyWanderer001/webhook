@@ -32,10 +32,11 @@ def take_screenshot():
         chrome_options = Options()
         chrome_options.add_argument('--headless')
 
-        driver = webdriver.Chrome(options=chrome_options, service_args=[])
+        driver = webdriver.Chrome(options=chrome_options)
         driver.maximize_window()
         driver.get(url)
         driver.save_screenshot(save_path)
+        print(f'Screenshot saved: {save_path}')
         driver.quit()
 
     except Exception as e:
@@ -231,7 +232,9 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                     send_whatsapp_image('screenshot.png')
                     get_foto(issue_id)
 
+
             os.remove('screenshot.png')
+            print(f"Image screenshot.png deleted after sending to WhatsApp.")
 
             return 'Webhook request successfully processed', 200
         except Exception as e:
