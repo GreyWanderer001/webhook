@@ -66,7 +66,7 @@ def get_foto(issue_id):
                 with open(image_filename, 'wb') as image_file:
                     image_file.write(image_response.content)
 
-                print(f"Image {len(images) + 1} downloaded successfully.")
+                print(f"Image {image_filename} downloaded successfully.")
                 send_whatsapp_image(image_filename)
                 images.append(image_filename)
 
