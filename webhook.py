@@ -13,7 +13,8 @@ import os
 app = Flask(__name__)
 
 load_dotenv('.env')
-logging.basicConfig(filename='webhook_errors.log', level=logging.ERROR, format='%(asctime)s  %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(filename='info.log', level=logging.INFO, format='%(asctime)s  %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
 
 def print_info(issue_number, translated_description, status, tracker, priority, assignee_name, assignee_lastname):
     print()
@@ -25,10 +26,10 @@ def print_info(issue_number, translated_description, status, tracker, priority, 
     print(f"Issue assignee: {assignee_name} {assignee_lastname}")
     print()
 
-def take_screenshot(issue_id):
+
+def take_screenshot(save_path):
     try:
         url = os.getenv("URL")
-        save_path = f"{dir}/screenshot_{issue_id}.png"
 
         chromium = os.getenv("CHROMIUM")
 
@@ -37,26 +38,26 @@ def take_screenshot(issue_id):
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
-        options.add_argument("--window-size=800,600")
+        options.add_argument("--window-size=1024,800")
         options.binary_location = chromium
 
         driver = webdriver.Chrome(options=options)
-        driver.maximize_window()
         driver.get(url)
         driver.save_screenshot(save_path)
-        print(f'Screenshot saved: {save_path}')
+        logging.info(f'Screenshot saved: {save_path}')
         driver.quit()
 
         if os.path.exists(save_path):
-            print(f"Screenshot already exists: {save_path}")
+            logging.info(f"Screenshot already exists: {save_path}")
             return True
-        else:
-            logging.error(f"Error saving screenshot")
+        
+        logging.error(f"Error saving screenshoti {save_path}")
 
     except Exception as e:
-        logging.error(f"Error taking screenshot: {e}")
-        import traceback
-        traceback.print_exc()
+        logging.exception(f"Error taking screenshot: {e}")
+    
+    return False
+
 
 def get_foto(issue_id, folder_name):
     try:
@@ -77,23 +78,21 @@ def get_foto(issue_id, folder_name):
 
                 image_response = requests.get(image_url, params={'key': key})
                 image_response.raise_for_status()
-                image_filename = f"image_{len(images) + 1}_{issue_id}.png"
+                image_filename = os.path.join(folder_name, f"image_{len(images) + 1}_{issue_id}.png")
 
-                with open(os.path.join(folder_name, image_filename), 'wb') as image_file:
+                with open(image_filename, 'wb') as image_file:
                     image_file.write(image_response.content)
 
                 print(f"Image {image_filename} downloaded successfully.")
-                send_whatsapp_image(f'{dir}/image_filename')
-                images.append(image_filename)
+                send_whatsapp_image(image_filename)
+                images.append(os.path.basename(image_filename))
 
-        if not images:
-            print("No images found.")
-            return None
-        else:
-            return images
+        return images
+
     except Exception as e:
-        logging.error(f"Error getting images: {e}")
-        return None
+        logging.exception(f"Error getting images: {e}")
+    
+    return None
 
 
 def send_translated(translated_description, issue_id):
@@ -137,6 +136,7 @@ def send_translated(translated_description, issue_id):
     except Exception as e:
         logging.error(f"Error sending translated description: {e}")
 
+
 def translate_to_english(text):
     try:
         clean_text = BeautifulSoup(text, 'html.parser').get_text()
@@ -144,8 +144,10 @@ def translate_to_english(text):
         return translated_text
     
     except Exception as e:
-        logging.error(f"Error translating text: {e}")
-        return text
+        logging.exception(f"Error translating text: {e}")
+    
+    return text
+
 
 def send_whatsapp_image(image):
     try:
@@ -174,7 +176,8 @@ def send_whatsapp_image(image):
         print("WhatsApp image sent successfully.")
 
     except Exception as e:
-        logging.error(f"Error sending WhatsApp image: {e}")
+        logging.exception(f"Error sending WhatsApp image: {e}")
+
 
 def send_whatsapp_message(message):
     try:
@@ -200,27 +203,20 @@ def send_whatsapp_message(message):
         print("WhatsApp message sent successfully.")
 
     except Exception as e:
-        logging.error(f"Error sending WhatsApp message: {e}")
+        logging.exception(f"Error sending WhatsApp message: {e}")
+
 
 @app.route('/', methods=['POST', 'GET'])
 def redmine_webhook():
     if request.method == 'POST':
         try:
             data = request.json
-
-            
-
             issue_id = data.get('payload', {}).get('issue', {}).get('id')
 
             folder_name = f"request_{issue_id}"
             if not os.path.exists(folder_name):
                 os.mkdir(folder_name)
-            else:
-                logging.error(f"Folder '{folder_name}' already exists.")
 
-            global dir
-            dir = f'request_{issue_id}'
-            
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
             translated_description = translate_to_english(data.get('payload', {}).get('issue', {}).get('subject', ''))
             created = data.get('payload', {}).get('issue', {}).get('created_on', {})
@@ -254,19 +250,24 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                     send_translated(translated_description, issue_id)
                     send_whatsapp_message(message)
                     get_foto(issue_id, folder_name)
-                    if priority == 'Out of action':
-                        take_screenshot(issue_id)
-                        send_whatsapp_image(f"{dir}/screenshot_{issue_id}.png")
 
-            os.rmdir(folder_name)
-            print(f"Folder {folder_name} deleted after processing the request.")
+                    if priority == 'Out of action':
+                        screenshot = f'{folder_name}/screenshot_{issue_id}.png'
+                        if take_screenshot(screenshot):
+                            send_whatsapp_image(screenshot)
+
+            if os.path.exists(folder_name) and os.path.isdir(folder_name):
+                shutil.rmtree(folder_name)
+                
+                print(f"Folder {folder_name} deleted after processing the request.")
 
             return 'Webhook request successfully processed', 200
         except Exception as e:
-            logging.error(f"Error processing webhook request: {e}")
+            logging.exception(f"Error processing webhook request: {e}")
             return 'Internal Server Error', 500
     else:
         return 'Method Not Allowed', 405
+
 
 if __name__ == '__main__':
     host = os.getenv("HOST")
