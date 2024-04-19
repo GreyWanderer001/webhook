@@ -6,12 +6,13 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
 import logging
+import shutil
 import base64
 import os
 
 app = Flask(__name__)
 
-load_dotenv('example.env')
+load_dotenv('.env')
 logging.basicConfig(filename='webhook_errors.log', level=logging.ERROR, format='%(asctime)s  %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 def print_info(issue_number, translated_description, status, tracker, priority, assignee_name, assignee_lastname):
@@ -24,15 +25,19 @@ def print_info(issue_number, translated_description, status, tracker, priority, 
     print(f"Issue assignee: {assignee_name} {assignee_lastname}")
     print()
 
-def take_screenshot():
+def take_screenshot(folder_name, issue_id):
     try:
         url = "http://mech.bct.lv/"
-        save_path = "screenshot.png"
+        save_path = f"{folder_name}/screenshot_{issue_id}.png"
 
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.binary_location = '/usr/bin/chromium-browser';
 
-        driver = webdriver.Chrome(options=chrome_options)
+        driver = webdriver.Chrome(options=options)
         driver.maximize_window()
         driver.get(url)
         driver.save_screenshot(save_path)
@@ -41,8 +46,10 @@ def take_screenshot():
 
     except Exception as e:
         logging.error(f"Error taking screenshot: {e}")
+        import traceback
+        traceback.print_exc()
 
-def get_foto(issue_id):
+def get_foto(issue_id, folder_name):
     try:
         key = os.getenv("KEY")
         redmine_url = os.getenv("REDMINE_URL")
@@ -63,14 +70,14 @@ def get_foto(issue_id):
                 image_response.raise_for_status()
                 image_filename = f"image_{len(images) + 1}_{issue_id}.png"
 
-                with open(image_filename, 'wb') as image_file:
+                with open(os.path.join(folder_name, image_filename), 'wb') as image_file:
                     image_file.write(image_response.content)
 
                 print(f"Image {image_filename} downloaded successfully.")
-                send_whatsapp_image(image_filename)
+                send_whatsapp_image(os.path.join(folder_name, image_filename))
                 images.append(image_filename)
 
-                os.remove(image_filename)
+                os.remove(os.path.join(folder_name, image_filename))
                 print(f"Image {image_filename} deleted after sending to WhatsApp.")
 
         if not images:
@@ -194,7 +201,12 @@ def redmine_webhook():
         try:
             data = request.json
 
-            take_screenshot()
+            issue_id = data.get('payload', {}).get('issue', {}).get('id')
+
+            folder_name = f"request_{issue_id}"
+            os.makedirs(folder_name)
+
+            take_screenshot(folder_name, issue_id)
 
             issue_id = data.get('payload', {}).get('issue', {}).get('id')
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
@@ -229,13 +241,16 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                 if item["custom_field_name"] == "Translated Subject" and item["value"] == "":
                     send_translated(translated_description, issue_id)
                     send_whatsapp_message(message)
-                    get_foto(issue_id)
+                    get_foto(issue_id, folder_name)
                     if priority == 'Out of action':
-                        send_whatsapp_image('screenshot.png')
+                        send_whatsapp_image(f"{folder_name}/screenshot_{issue_id}.png")
 
 
-            os.remove('screenshot.png')
-            print(f"Image screenshot.png deleted after sending to WhatsApp.")
+            os.remove(f"{folder_name}/screenshot_{issue_id}.png")
+            print(f"Image screenshot_{issue_id}.png deleted after sending to WhatsApp.")
+
+            shutil.rmtree(folder_name)
+            print(f"Folder {folder_name} deleted after processing the request.")
 
             return 'Webhook request successfully processed', 200
         except Exception as e:
