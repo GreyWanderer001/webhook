@@ -89,6 +89,7 @@ def get_foto(issue_id, folder_name):
         logging.error(f"Error getting images: {e}")
         return None
 
+
 def send_translated(translated_description, issue_id):
     try:
         key = os.getenv("KEY")
@@ -207,8 +208,6 @@ def redmine_webhook():
             os.makedirs(folder_name)
 
             take_screenshot(folder_name, issue_id)
-
-            issue_id = data.get('payload', {}).get('issue', {}).get('id')
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
             translated_description = translate_to_english(data.get('payload', {}).get('issue', {}).get('subject', ''))
             created = data.get('payload', {}).get('issue', {}).get('created_on', {})
