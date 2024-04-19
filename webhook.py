@@ -14,24 +14,17 @@ app = Flask(__name__)
 load_dotenv('example.env')
 logging.basicConfig(filename='webhook_errors.log', level=logging.ERROR, format='%(asctime)s  %(levelname)s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-def print_info(issue_number, translated_description, status, tracker, priority, assignee_name, assignee_lastname):
-    print()
-    print(f'Issue number is: {issue_number}')
-    print(f"Issue description: {translated_description}")
-    print(f"Issue status: {status}")
-    print(f"Issue tracker: {tracker}")
-    print(f"Issue priority: {priority}")
-    print(f"Issue assignee: {assignee_name} {assignee_lastname}")
-    print()
+if not os.path.exists('images'):
+    os.makedirs('images')
 
-def take_screenshot():
+def take_screenshot(issue_id):
     try:
         url = "http://mech.bct.lv/"
-        save_path = "screenshot.png"
+        save_path = f"images/screenshot_{issue_id}.png"
 
         chrome_options = Options()
         chrome_options.add_argument('--headless')
-
+        
         driver = webdriver.Chrome(options=chrome_options)
         driver.maximize_window()
         driver.get(url)
@@ -61,7 +54,7 @@ def get_foto(issue_id):
 
                 image_response = requests.get(image_url, params={'key': key})
                 image_response.raise_for_status()
-                image_filename = f"image_{len(images) + 1}_{issue_id}.png"
+                image_filename = f"images/image_{len(images) + 1}_{issue_id}.png"
 
                 with open(image_filename, 'wb') as image_file:
                     image_file.write(image_response.content)
@@ -140,7 +133,7 @@ def send_whatsapp_image(image):
         client_secret = os.getenv("CLIENT_SECRET")
         group_name = os.getenv("GROUP_NAME")
 
-        fullpath_to_photo = image
+        fullpath_to_photo = f"images/{image}"
         image_base64 = None
         with open(fullpath_to_photo, 'rb') as image:
             image_base64 = base64.b64encode(image.read())
@@ -194,9 +187,8 @@ def redmine_webhook():
         try:
             data = request.json
 
-            take_screenshot()
-
             issue_id = data.get('payload', {}).get('issue', {}).get('id')
+            take_screenshot(issue_id)
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
             translated_description = translate_to_english(data.get('payload', {}).get('issue', {}).get('subject', ''))
             created = data.get('payload', {}).get('issue', {}).get('created_on', {})
@@ -231,11 +223,10 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                     send_whatsapp_message(message)
                     get_foto(issue_id)
                     if priority == 'Out of action':
-                        send_whatsapp_image('screenshot.png')
+                        send_whatsapp_image(f'screenshot_{issue_id}.png')
 
-
-            os.remove('screenshot.png')
-            print(f"Image screenshot.png deleted after sending to WhatsApp.")
+            os.remove(f'images/screenshot_{issue_id}.png')
+            print(f"Image screenshot_{issue_id}.png deleted after sending to WhatsApp.")
 
             return 'Webhook request successfully processed', 200
         except Exception as e:
