@@ -25,17 +25,20 @@ def print_info(issue_number, translated_description, status, tracker, priority, 
     print(f"Issue assignee: {assignee_name} {assignee_lastname}")
     print()
 
-def take_screenshot(folder_name, issue_id):
+def take_screenshot(issue_id):
     try:
-        url = "http://mech.bct.lv/"
-        save_path = f"{folder_name}/screenshot_{issue_id}.png"
+        url = os.getenv("URL")
+        save_path = f"{dir}/screenshot_{issue_id}.png"
+
+        chromium = os.getenv("CHROMIUM")
 
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
-        options.binary_location = '/usr/bin/chromium-browser';
+        options.add_argument("--window-size=800,600")
+        options.binary_location = chromium
 
         driver = webdriver.Chrome(options=options)
         driver.maximize_window()
@@ -43,6 +46,12 @@ def take_screenshot(folder_name, issue_id):
         driver.save_screenshot(save_path)
         print(f'Screenshot saved: {save_path}')
         driver.quit()
+
+        if os.path.exists(save_path):
+            print(f"Screenshot already exists: {save_path}")
+            return True
+        else:
+            logging.error(f"Error saving screenshot")
 
     except Exception as e:
         logging.error(f"Error taking screenshot: {e}")
@@ -74,11 +83,8 @@ def get_foto(issue_id, folder_name):
                     image_file.write(image_response.content)
 
                 print(f"Image {image_filename} downloaded successfully.")
-                send_whatsapp_image(os.path.join(folder_name, image_filename))
+                send_whatsapp_image(f'{dir}/image_filename')
                 images.append(image_filename)
-
-                os.remove(os.path.join(folder_name, image_filename))
-                print(f"Image {image_filename} deleted after sending to WhatsApp.")
 
         if not images:
             print("No images found.")
@@ -202,12 +208,19 @@ def redmine_webhook():
         try:
             data = request.json
 
+            
+
             issue_id = data.get('payload', {}).get('issue', {}).get('id')
 
             folder_name = f"request_{issue_id}"
-            os.makedirs(folder_name)
+            if not os.path.exists(folder_name):
+                os.mkdir(folder_name)
+            else:
+                logging.error(f"Folder '{folder_name}' already exists.")
 
-            take_screenshot(folder_name, issue_id)
+            global dir
+            dir = f'request_{issue_id}'
+            
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
             translated_description = translate_to_english(data.get('payload', {}).get('issue', {}).get('subject', ''))
             created = data.get('payload', {}).get('issue', {}).get('created_on', {})
@@ -242,13 +255,10 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                     send_whatsapp_message(message)
                     get_foto(issue_id, folder_name)
                     if priority == 'Out of action':
-                        send_whatsapp_image(f"{folder_name}/screenshot_{issue_id}.png")
+                        take_screenshot(issue_id)
+                        send_whatsapp_image(f"{dir}/screenshot_{issue_id}.png")
 
-
-            os.remove(f"{folder_name}/screenshot_{issue_id}.png")
-            print(f"Image screenshot_{issue_id}.png deleted after sending to WhatsApp.")
-
-            shutil.rmtree(folder_name)
+            os.rmdir(folder_name)
             print(f"Folder {folder_name} deleted after processing the request.")
 
             return 'Webhook request successfully processed', 200
