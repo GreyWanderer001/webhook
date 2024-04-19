@@ -1,9 +1,16 @@
 from selenium.webdriver.chrome.options import Options
-from deep_translator import GoogleTranslator
+
+try:
+    from deep_translator import GoogleTranslator
+    TRANSLATION_AVAILABLE = True
+except Exception:
+    TRANSLATION_AVAILABLE = False
+
 from flask import Flask, request
 from selenium import webdriver
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from pathlib import Path
 import requests
 import logging
 import shutil
@@ -47,7 +54,7 @@ def take_screenshot(save_path):
         logging.info(f'Screenshot saved: {save_path}')
         driver.quit()
 
-        if os.path.exists(save_path):
+        if save_path.exists():
             logging.info(f"Screenshot already exists: {save_path}")
             return True
         
@@ -78,14 +85,14 @@ def get_foto(issue_id, folder_name):
 
                 image_response = requests.get(image_url, params={'key': key})
                 image_response.raise_for_status()
-                image_filename = os.path.join(folder_name, f"image_{len(images) + 1}_{issue_id}.png")
+                image_filename = folder_name.joinpath(f"image_{len(images) + 1}_{issue_id}.png").resolve()
 
                 with open(image_filename, 'wb') as image_file:
                     image_file.write(image_response.content)
 
                 print(f"Image {image_filename} downloaded successfully.")
                 send_whatsapp_image(image_filename)
-                images.append(os.path.basename(image_filename))
+                images.append(image_filename.name)
 
         return images
 
@@ -96,6 +103,9 @@ def get_foto(issue_id, folder_name):
 
 
 def send_translated(translated_description, issue_id):
+    if not TRANSLATION_AVAILABLE:
+        return
+
     try:
         key = os.getenv("KEY")
         redmine_url = os.getenv("REDMINE_URL")
@@ -138,6 +148,9 @@ def send_translated(translated_description, issue_id):
 
 
 def translate_to_english(text):
+    if not TRANSLATION_AVAILABLE:
+        return text
+
     try:
         clean_text = BeautifulSoup(text, 'html.parser').get_text()
         translated_text = GoogleTranslator(source='auto', target='en').translate(clean_text)
@@ -213,9 +226,8 @@ def redmine_webhook():
             data = request.json
             issue_id = data.get('payload', {}).get('issue', {}).get('id')
 
-            folder_name = f"request_{issue_id}"
-            if not os.path.exists(folder_name):
-                os.mkdir(folder_name)
+            folder_name = Path(f"request_{issue_id}")
+            folder_name.mkdir(parents=True, exist_ok=True)
 
             issue_number = data.get('payload', {}).get('issue', {}).get('project').get('name')
             translated_description = translate_to_english(data.get('payload', {}).get('issue', {}).get('subject', ''))
@@ -252,11 +264,11 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
                     get_foto(issue_id, folder_name)
 
                     if priority == 'Out of action':
-                        screenshot = f'{folder_name}/screenshot_{issue_id}.png'
+                        screenshot = folder_name.joinpath(f'screenshot_{issue_id}.png')
                         if take_screenshot(screenshot):
                             send_whatsapp_image(screenshot)
 
-            if os.path.exists(folder_name) and os.path.isdir(folder_name):
+            if folder_name.exists() and folder_name.is_dir():
                 shutil.rmtree(folder_name)
                 
                 print(f"Folder {folder_name} deleted after processing the request.")
