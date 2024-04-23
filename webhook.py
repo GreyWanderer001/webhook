@@ -1,7 +1,7 @@
 from selenium.webdriver.chrome.options import Options
 
 try:
-    from deep_translator import GoogleTranslator
+    from googletrans import Translator
     TRANSLATION_AVAILABLE = True
 except Exception:
     TRANSLATION_AVAILABLE = False
@@ -153,8 +153,10 @@ def translate_to_english(text):
 
     try:
         clean_text = BeautifulSoup(text, 'html.parser').get_text()
-        translated_text = GoogleTranslator(source='auto', target='en').translate(clean_text)
-        return translated_text
+
+        translator = Translator()
+        translation = translator.translate(clean_text)
+        return translation.text
     
     except Exception as e:
         logging.exception(f"Error translating text: {e}")
