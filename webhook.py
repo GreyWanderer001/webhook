@@ -262,10 +262,10 @@ Issue reporter: {assignee_name} {assignee_lastname}'''
             for item in data["payload"]["issue"]["custom_field_values"]:
                 if item["custom_field_name"] == "Translated Subject" and item["value"] == "":
                     send_translated(translated_description, issue_id)
-                    send_whatsapp_message(message)
-                    get_foto(issue_id, folder_name)
 
                     if priority == 'Out of action':
+                        send_whatsapp_message(message)
+                        get_foto(issue_id, folder_name)
                         screenshot = folder_name.joinpath(f'screenshot_{issue_id}.png')
                         if take_screenshot(screenshot):
                             send_whatsapp_image(screenshot)
